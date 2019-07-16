@@ -1241,27 +1241,30 @@ class KineticsFamily(Database):
             template = self.get_reaction_template(item)
 
             item.template = self.get_reaction_template_labels(item)
-            new_degeneracy = self.calculate_degeneracy(item)
-
-            new_entry = Entry(
-                index=index,
-                label=';'.join([g.label for g in template]),
-                item=Reaction(reactants=[g.item for g in template],
-                              products=[]),
-                data=data.to_arrhenius_ep(),
-                rank=entry.rank,
-                reference=entry.reference,
-                short_desc="Rate rule generated from training reaction {0}. ".format(entry.index) + entry.short_desc,
-                long_desc="Rate rule generated from training reaction {0}. ".format(entry.index) + entry.long_desc,
-            )
-            new_entry.data.comment = "From training reaction {1} used for {0}".format(';'.join([g.label for g in template]), entry.index)
-
-            new_entry.data.A.value_si /= new_degeneracy
             try:
-                self.rules.entries[new_entry.label].append(new_entry)
-            except KeyError:
-                self.rules.entries[new_entry.label] = [new_entry]
-            index += 1
+                new_degeneracy = self.calculate_degeneracy(item)
+
+                new_entry = Entry(
+                    index=index,
+                    label=';'.join([g.label for g in template]),
+                    item=Reaction(reactants=[g.item for g in template],
+                                  products=[]),
+                    data=data.to_arrhenius_ep(),
+                    rank=entry.rank,
+                    reference=entry.reference,
+                    short_desc="Rate rule generated from training reaction {0}. ".format(entry.index) + entry.short_desc,
+                    long_desc="Rate rule generated from training reaction {0}. ".format(entry.index) + entry.long_desc,
+                )
+                new_entry.data.comment = "From training reaction {1} used for {0}".format(';'.join([g.label for g in template]), entry.index)
+
+                new_entry.data.A.value_si /= new_degeneracy
+                try:
+                    self.rules.entries[new_entry.label].append(new_entry)
+                except KeyError:
+                    self.rules.entries[new_entry.label] = [new_entry]
+                index += 1
+            except:
+                pass
 
     def get_root_template(self):
         """
@@ -1870,9 +1873,9 @@ class KineticsFamily(Database):
         # log issues
         if len(reactions) != 1:
             for reactant in reaction.reactants:
-                logging.error("Reactant: {0!r}".format(reactant))
+                logging.debug("Reactant: {0!r}".format(reactant))
             for product in reaction.products:
-                logging.error("Product: {0!r}".format(product))
+                logging.debug("Product: {0!r}".format(product))
             raise KineticsError(('Unable to calculate degeneracy for reaction {0} '
                                  'in reaction family {1}. Expected 1 reaction '
                                  'but generated {2}').format(reaction, self.label, len(reactions)))
