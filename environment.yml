@@ -5,6 +5,7 @@ channels:
   - rdkit
   - cantera
   - pytorch
+  - dglteam
   - conda-forge
 dependencies:
   - cairo
@@ -15,6 +16,7 @@ dependencies:
   - coolprop
   - coverage
   - cython >=0.25.2
+  - dgl
   - ffmpeg
   - gprof2dot
   - graphviz
