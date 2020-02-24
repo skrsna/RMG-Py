@@ -34,15 +34,17 @@ from typing import Callable, Union
 
 try:
     import dgl
+    import torch
 except ImportError as e:
-    dgl = None
-    dgl_exception = e
+    dgl, torch = None, None
+    dgl_exception, torch_exception = e,e
+    
 import numpy as np
 
 from rmgpy.molecule import Molecule
 from rmgpy.species import Species
 from rmgpy.thermo import ThermoData
-
+from rmgpy.ml.utils import make_dgl_graph_from_smiles, MPNNModel
 
 class MLEstimator:
     """
@@ -76,10 +78,11 @@ class MLEstimator:
         """
         molecule = Molecule(smiles=molecule) if isinstance(molecule, str) else molecule
 
-        hf298 = self.hf298_estimator(molecule.smiles)[0][0]
-        s298_cp = self.s298_cp_estimator(molecule.smiles)[0]
-        s298, cp = s298_cp[0], s298_cp[1:]
-
+        hf298 = self.hf298_estimator(molecule.smiles)['hf298']
+        s298_cp = self.s298_cp_estimator(molecule.smiles)
+        s298 = s298_cp['s']
+        cp = np.zeros(len(self.temps))
+        cp = s298_cp['cp300'], s298_cp['cp400'], s298_cp['cp500'], s298_cp['cp600'], s298_cp['cp800'], s298_cp['cp1000'], s298_cp['cp1500']
         cp0 = molecule.calculate_cp0()
         cpinf = molecule.calculate_cpinf()
 
@@ -93,7 +96,7 @@ class MLEstimator:
             CpInf=(cpinf, 'J/(mol*K)'),
             Tmin=(300.0, 'K'),
             Tmax=(2000.0, 'K'),
-            comment='ML Estimation'
+            comment='ML Estimation using DGL and tuned mpnn model'
         )
 
         return thermo
@@ -111,17 +114,39 @@ class MLEstimator:
         return self.get_thermo_data(species.molecule[0])
 
 
-def load_estimator(model_dir: str) -> Callable[[str], np.ndarray]:
+def load_estimator(model_dir: str) -> Callable[[str], dict]:
     """
-    Load dgl model and return function for evaluating it.
+    Load saved torch model and return function for evaluating it.
     """
     if dgl is None:
         # Delay dgl ImportError until we actually try to use it
         # so that RMG can load successfully without dgl.
         raise dgl_exception
-
-    args = Namespace()  # Simple class to hold attributes
-
-    # Set up dgl predict arguments
-    estimator = None
+    
+    if len(os.listdir(model_dir)) == 1:
+        model = torch.load(os.path.join(model_dir,'hf298_model.pth'),map_location='cpu')
+        predictor = MPNNModel()
+        predictor.load_state_dict(model['state_dict'])
+        def estimator(smi: str):
+            predictor.eval()
+            with torch.no_grad():
+                pred = predictor(make_dgl_graph_from_smiles(smi))
+            return {"hf298":float(pred[0][0].cpu().detach().numpy())}
+    
+    elif len(os.listdir(model_dir)) > 1:
+        saved_models = os.listdir(model_dir)
+        models = dict([(model.split('_')[0],torch.load(os.path.join(model_dir,model),map_location='cpu')) for model in saved_models])
+        preds = dict()
+        def estimator(smi: str):
+            for prop, loaded_checkpoint in models.items():
+                #print("predicting for prop {}".format(prop))
+                dgl_graph = make_dgl_graph_from_smiles(smi)
+                predictor = MPNNModel()
+                predictor.load_state_dict(loaded_checkpoint['state_dict'])
+                predictor.eval()
+                with torch.no_grad():
+                    preds[prop] = float(predictor(dgl_graph)[0][0].cpu().detach().numpy())
+            return preds
     return estimator
+
+

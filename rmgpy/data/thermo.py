@@ -1308,11 +1308,11 @@ class ThermoDatabase(object):
 
             if thermo0 is None:
                 # If we still don't have thermo, use ML to estimate it, but
-                # only if the molecule is made up of H, C, N, and O atoms and
+                # only if the molecule is made up of H, C, N, and O, F and Cl atoms and
                 # is not a singlet carbene. ML settings are checked in
                 # `self.get_thermo_data_from_ml`.
                 if (ml_estimator is not None
-                        and all(a.element.number in {1, 6, 7, 8} for a in species.molecule[0].atoms)
+                        and all(a.element.number in {1, 6, 7, 8, 9, 17} for a in species.molecule[0].atoms)
                         and species.molecule[0].get_singlet_carbene_count() == 0):
                     thermo0 = self.get_thermo_data_from_ml(species,
                                                            ml_estimator,
