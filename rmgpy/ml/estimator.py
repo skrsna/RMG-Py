@@ -125,7 +125,9 @@ def load_estimator(model_dir: str) -> Callable[[str], dict]:
     
     if len(os.listdir(model_dir)) == 1:
         model = torch.load(os.path.join(model_dir,'hf298_model.pth'),map_location='cpu')
-        predictor = MPNNModel()
+        predictor = MPNNModel(node_input_dim=16,edge_input_dim=4,node_hidden_dim=model['params']['node_hidden_dim'],
+                            edge_hidden_dim=model['params']['edge_hidden_dim'],num_step_message_passing=model['params']['num_step_message_passing'],
+                            num_layer_set2set=model['params']['num_layer_set2set'],num_step_set2set=model['params']['num_step_set2set'])
         predictor.load_state_dict(model['state_dict'])
         def estimator(smi: str):
             predictor.eval()
