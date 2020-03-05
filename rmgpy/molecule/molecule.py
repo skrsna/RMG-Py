@@ -1470,8 +1470,7 @@ class Molecule(Graph):
 
     def find_isomorphism(self, other, initial_map=None, save_order=False, strict=True):
         """
-        Returns :data:`True` if `other` is isomorphic and :data:`False`
-        otherwise, and the matching mapping. The `initialMap` attribute can be
+        Returns :data: matching mapping. The `initialMap` attribute can be
         used to specify a required mapping from `self` to `other` (i.e. the
         atoms of `self` are the keys, while the atoms of `other` are the
         values). The returned mapping also uses the atoms of `self` for the keys
