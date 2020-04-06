@@ -81,7 +81,6 @@ class MLEstimator:
         hf298 = self.hf298_estimator(molecule.smiles)
         s298 = self.s298_cp_estimator(molecule.smiles)
         cp = np.zeros(len(self.temps))
-        print(self.cp_estimator(molecule.smiles))
         cp[:] = self.cp_estimator(molecule.smiles)
         cp0 = molecule.calculate_cp0()
         cpinf = molecule.calculate_cpinf()
