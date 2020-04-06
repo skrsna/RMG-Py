@@ -636,7 +636,7 @@ def ml_estimator(thermo=True,
         hf298_path = os.path.join(models_path, 'hf298')
         s298_path = os.path.join(models_path, 's298')
         cp_path=os.path.join(models_path,'cp')
-        rmg.ml_estimator = MLEstimator(hf298_path, s298_cp_path)
+        rmg.ml_estimator = MLEstimator(hf298_path, s298_path, cp_path)
 
         uncertainty_cutoffs = dict(
             H298=Quantity(*H298UncertaintyCutoff),
