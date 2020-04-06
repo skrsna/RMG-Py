@@ -158,11 +158,11 @@ class MPN(nn.Module):
     num_step_message_passing : int
     """
     def __init__(self,
-                 node_input_dim=15,
-                 edge_input_dim=6,
-                 node_hidden_dim=25,
-                 edge_hidden_dim=5,
-                 num_step_message_passing=6,
+                 node_input_dim=16,
+                 edge_input_dim=4,
+                 node_hidden_dim=64,
+                 edge_hidden_dim=128,
+                 num_step_message_passing=5,
                 ):
         super(MPN, self).__init__()
 

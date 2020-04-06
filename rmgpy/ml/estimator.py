@@ -95,7 +95,7 @@ class MLEstimator:
             CpInf=(cpinf, 'J/(mol*K)'),
             Tmin=(300.0, 'K'),
             Tmax=(2000.0, 'K'),
-            comment='ML Estimation using DGL and tuned mpnn model'
+            comment='ML Estimation using DGL and tuned GNN model'
         )
 
         return thermo
