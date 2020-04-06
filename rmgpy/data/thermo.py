@@ -1270,11 +1270,17 @@ class ThermoDatabase(object):
                 # `self.get_thermo_data_from_ml`.
                 if (ml_estimator is not None
                         and all(a.element.number in {1, 6, 7, 8, 9} for a in species.molecule[0].atoms) #and species.molecule[0].get_singlet_carbene_count() == 0
-                        ):
-                    thermo0 = self.get_thermo_data_from_ml(species,
-                                                           ml_estimator,
-                                                           ml_settings)
-        
+                            ):
+                    try:
+                        thermo0 = self.get_thermo_data_from_ml(species,
+                                                            ml_estimator,
+                                                            ml_settings)
+                    except KeyError:
+                        thermo0 = None
+                        logging.info("DGL had error with the following smiles")
+                        logging.info(species.molecule[0].smiles)
+                        logging.info("\n")
+
         if thermo0 is None:
             # First try finding stable species in libraries and using HBI
             for mol in species.molecule:
