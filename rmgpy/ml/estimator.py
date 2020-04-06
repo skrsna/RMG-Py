@@ -44,7 +44,7 @@ import numpy as np
 from rmgpy.molecule import Molecule
 from rmgpy.species import Species
 from rmgpy.thermo import ThermoData
-from rmgpy.ml.utils import make_dgl_graph_from_smiles, MPNNModel
+from rmgpy.ml.utils import make_dgl_graph_from_smiles, MPNPool
 
 class MLEstimator:
     """
@@ -65,10 +65,10 @@ class MLEstimator:
     # trained on for Cp.
     temps = [300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0]
 
-    def __init__(self, hf298_path: str, s298_cp_path: str):
+    def __init__(self, hf298_path: str, s298_path: str, cp_path: str):
         self.hf298_estimator = load_estimator(hf298_path)
-        self.s298_cp_estimator = load_estimator(s298_cp_path)
-
+        self.s298_cp_estimator = load_estimator(s298_path)
+        self.cp_estimator = load_estimator(cp_path)
     def get_thermo_data(self, molecule: Union[Molecule, str]) -> ThermoData:
         """
         Return thermodynamic parameters corresponding to a given
@@ -78,11 +78,11 @@ class MLEstimator:
         """
         molecule = Molecule(smiles=molecule) if isinstance(molecule, str) else molecule
 
-        hf298 = self.hf298_estimator(molecule.smiles)['hf298']
-        s298_cp = self.s298_cp_estimator(molecule.smiles)
-        s298 = s298_cp['s']
+        hf298 = self.hf298_estimator(molecule.smiles)
+        s298 = self.s298_cp_estimator(molecule.smiles)
         cp = np.zeros(len(self.temps))
-        cp = s298_cp['cp300'], s298_cp['cp400'], s298_cp['cp500'], s298_cp['cp600'], s298_cp['cp800'], s298_cp['cp1000'], s298_cp['cp1500']
+        print(self.cp_estimator(molecule.smiles))
+        cp[:] = self.cp_estimator(molecule.smiles)
         cp0 = molecule.calculate_cp0()
         cpinf = molecule.calculate_cpinf()
 
@@ -124,16 +124,17 @@ def load_estimator(model_dir: str) -> Callable[[str], dict]:
         raise dgl_exception
     
     if len(os.listdir(model_dir)) == 1:
-        model = torch.load(os.path.join(model_dir,'hf298_model.pth'),map_location='cpu')
-        predictor = MPNNModel(node_input_dim=16,edge_input_dim=4,node_hidden_dim=model['params']['node_hidden_dim'],
-                            edge_hidden_dim=model['params']['edge_hidden_dim'],num_step_message_passing=model['params']['num_step_message_passing'],
-                            num_layer_set2set=model['params']['num_layer_set2set'],num_step_set2set=model['params']['num_step_set2set'])
+        model = torch.load(os.path.join(model_dir,'model.pth'),map_location='cpu')
+        predictor = MPNPool(pooling=model['params']['pooling'],output_dim=model['params']['output_dim'])
         predictor.load_state_dict(model['state_dict'])
         def estimator(smi: str):
             predictor.eval()
             with torch.no_grad():
                 pred = predictor(make_dgl_graph_from_smiles(smi))
-            return {"hf298":float(pred[0][0].cpu().detach().numpy())}
+            if model['params']['output_dim'] == 1: #hf298 and #s298 are single scalars
+                return float(pred[0][0].cpu().detach().numpy())
+            elif model['params']['output_dim'] == 7:
+                return pred[0].cpu().detach().numpy()
     
     elif len(os.listdir(model_dir)) > 1:
         saved_models = os.listdir(model_dir)
@@ -143,7 +144,7 @@ def load_estimator(model_dir: str) -> Callable[[str], dict]:
             for prop, loaded_checkpoint in models.items():
                 #print("predicting for prop {}".format(prop))
                 dgl_graph = make_dgl_graph_from_smiles(smi)
-                predictor = MPNNModel()
+                predictor = MPNPool(pooling=loaded_checkpoint['pooling'])
                 predictor.load_state_dict(loaded_checkpoint['state_dict'])
                 predictor.eval()
                 with torch.no_grad():

@@ -139,6 +139,79 @@ def make_dgl_graph_from_smiles(smiles: str) -> Callable[[str], dgl.BatchedDGLGra
     return bg
 
 
+
+
+class MPN(nn.Module):
+    """
+    MPNN from
+    `Neural Message Passing for Quantum Chemistry <https://arxiv.org/abs/1704.01212>`__
+    Parameters
+    ----------
+    node_input_dim : int
+        Dimension of input node feature, default to be 15.
+    edge_input_dim : int
+        Dimension of input edge feature, default to be 15.
+    node_hidden_dim : int
+        Dimension of node feature in hidden layers, default to be 64.
+    edge_hidden_dim : int
+        Dimension of edge feature in hidden layers, default to be 128.
+    num_step_message_passing : int
+    """
+    def __init__(self,
+                 node_input_dim=15,
+                 edge_input_dim=6,
+                 node_hidden_dim=25,
+                 edge_hidden_dim=5,
+                 num_step_message_passing=6,
+                ):
+        super(MPN, self).__init__()
+
+        self.num_step_message_passing = num_step_message_passing
+        self.lin0 = nn.Linear(node_input_dim, node_hidden_dim)
+        edge_network = nn.Sequential(
+            nn.Linear(edge_input_dim, edge_hidden_dim), nn.ReLU(),
+            nn.Dropout(p=0.2),
+            nn.Linear(edge_hidden_dim, node_hidden_dim * node_hidden_dim))
+        self.conv = NNConv(in_feats=node_hidden_dim,
+                           out_feats=node_hidden_dim,
+                           edge_func=edge_network,
+                           aggregator_type='sum')
+        self.gru = nn.GRU(node_hidden_dim, node_hidden_dim)
+        self.dropout = nn.Dropout(p=0.1)
+        
+    def forward(self, g):
+        """Predict molecule labels
+        Parameters
+        ----------
+        g : DGLGraph
+            Input DGLGraph for molecule(s)
+        n_feat : tensor of dtype float32 and shape (B1, D1)
+            Node features. B1 for number of nodes and D1 for
+            the node feature size.
+        e_feat : tensor of dtype float32 and shape (B2, D2)
+            Edge features. B2 for number of edges and D2 for
+            the edge feature size.
+        Returns
+        -------
+        res : Predicted labels
+        """
+        n_feat = g.ndata.pop('n_feat')
+        e_feat = g.edata.pop('e_feat')
+        if torch.cuda.is_available():
+            n_feat, e_feat = n_feat.to('cuda'), e_feat.to('cuda')
+        
+        out = F.leaky_relu(self.lin0(n_feat))                 # (B1, H1)
+        out = self.dropout(out)                              #use dropout (B1, H1)
+        h = out.unsqueeze(0)                            # (1, B1, H1)
+
+        for i in range(self.num_step_message_passing):
+            m = F.relu(self.conv(g, out, e_feat))       # (B1, H1)
+            out, h = self.gru(m.unsqueeze(0), h)
+            out = out.squeeze(0)
+        
+        return out
+
+
 class MPNPool(torch.nn.Module):
     def __init__(self,
                  node_input_dim=16,
