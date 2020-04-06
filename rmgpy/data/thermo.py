@@ -1264,6 +1264,18 @@ class ThermoDatabase(object):
                     thermo0 = quantum_mechanics.get_thermo_data(original_molecule)  # returns None if it fails
 
         if thermo0 is None:
+                # If we still don't have thermo, use ML to estimate it, but
+                # only if the molecule is made up of H, C, N, O and F atoms delete singlet 
+                # is not a singlet carbene. ML settings are checked in
+                # `self.get_thermo_data_from_ml`.
+                if (ml_estimator is not None
+                        and all(a.element.number in {1, 6, 7, 8, 9} for a in species.molecule[0].atoms) #and species.molecule[0].get_singlet_carbene_count() == 0
+                        ):
+                    thermo0 = self.get_thermo_data_from_ml(species,
+                                                           ml_estimator,
+                                                           ml_settings)
+        
+        if thermo0 is None:
             # First try finding stable species in libraries and using HBI
             for mol in species.molecule:
                 if mol.reactive:
@@ -1305,18 +1317,6 @@ class ThermoDatabase(object):
                         new_mol_list.extend([mol for mol in species.molecule if mol not in new_mol_list])
                     species.molecule = new_mol_list
                     thermo0 = thermo[0][2]
-
-            if thermo0 is None:
-                # If we still don't have thermo, use ML to estimate it, but
-                # only if the molecule is made up of H, C, N, and O atoms and
-                # is not a singlet carbene. ML settings are checked in
-                # `self.get_thermo_data_from_ml`.
-                if (ml_estimator is not None
-                        and all(a.element.number in {1, 6, 7, 8} for a in species.molecule[0].atoms)
-                        and species.molecule[0].get_singlet_carbene_count() == 0):
-                    thermo0 = self.get_thermo_data_from_ml(species,
-                                                           ml_estimator,
-                                                           ml_settings)
 
             if thermo0 is None:
                 # And lastly, resort back to group additivity to determine thermo for molecule
@@ -1749,7 +1749,8 @@ class ThermoDatabase(object):
         min_cycle_overlap = ml_settings['min_cycle_overlap']
         if min_cycle_overlap > 0 and molecule.get_max_cycle_overlap() < min_cycle_overlap:
             return None
-
+        """
+        deleted this block cause dgl models are good with radicals 
         if molecule.is_radical():
             thermo = [self.estimate_radical_thermo_via_hbi(mol, ml_estimator.get_thermo_data) for mol in species.molecule]
             H298 = np.array([tdata.H298.value_si for tdata in thermo])
@@ -1758,7 +1759,9 @@ class ThermoDatabase(object):
             thermo0 = thermo[indices[0]]
         else:
             thermo0 = ml_estimator.get_thermo_data_for_species(species)
-
+        """
+        thermo0 = ml_estimator.get_thermo_data_for_species(species)
+        
         # The keys for this dictionary should match the keys in
         # `RMG.ml_uncertainty_cutoffs`. Use a temperature-weighted
         # average to estimate uncertainty for Cp.
