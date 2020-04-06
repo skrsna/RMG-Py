@@ -195,8 +195,8 @@ class MPN(nn.Module):
         -------
         res : Predicted labels
         """
-        n_feat = g.ndata.pop('n_feat')
-        e_feat = g.edata.pop('e_feat')
+        n_feat = g.ndata['n_feat']
+        e_feat = g.edata['e_feat']
         if torch.cuda.is_available():
             n_feat, e_feat = n_feat.to('cuda'), e_feat.to('cuda')
         
