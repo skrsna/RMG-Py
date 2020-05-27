@@ -38,6 +38,7 @@ from libc.math cimport log10
 
 import rmgpy.quantity as quantity
 from rmgpy.molecule import Molecule
+from rmgpy.kinetics.arrhenius import Arrhenius
 
 ################################################################################
 
@@ -411,6 +412,40 @@ cdef class PDepKineticsModel(KineticsModel):
         """
         raise NotImplementedError('Unexpected call to PDepKineticsModel.get_rate_coefficient(); '
                                   'you should be using a class derived from PDepKineticsModel.')
+
+    cpdef Arrhenius to_arrhenius(self, double P=1e5):
+        """
+        Create a pressure-independent version of this, i.e. an Arrhenius
+        expression, fitted to a range of T, at the given effective pressure P.
+        If you have collision efficiencies, use get_effective_pressure first.
+
+               Return an :class:`Arrhenius` instance of the kinetics model
+
+        Fit the Arrhenius parameters to a set of rate coefficient data generated
+        from the MultiArrhenius kinetics, over the temperature range
+        Tmin to Tmax, in Kelvin. If Tmin or Tmax are unspecified (or -1)
+        then the MultiArrhenius's Tmin and Tmax are used.
+        A linear least-squares fit is used, which guarantees that the
+        resulting parameters provide the best possible approximation to the
+        data.
+        """
+        cdef Arrhenius arrh
+        cdef np.ndarray Tlist, klist
+        cdef str kunits
+        if Tmin == -1: Tmin = self.Tmin.value_si
+        if Tmax == -1: Tmax = self.Tmax.value_si
+        kunits = str(quantity.pq.Quantity(1.0, self.arrhenius[0].A.units).simplified).split()[-1]  # is this the best way to get the units returned by k??
+        Tlist = np.logspace(log10(Tmin), log10(Tmax), num=25)
+        klist = np.array(list(map(self.get_rate_coefficient, Tlist)), np.float64)
+        arrh = Arrhenius().fit_to_data(Tlist, klist, kunits)
+        arrh.comment = "Fitted to Multiple Arrhenius kinetics over range {Tmin}-{Tmax} K. {comment}".format(
+            Tmin=Tmin, Tmax=Tmax, comment=self.comment)
+        return arrh
+        self.get_rate_coefficient(T, P) # at a bunch of T
+        arrhenius = Arrhenius()
+        arrhenius.fit_to_data(Tlist, klist, kunits)
+        return arrhenius
+
 
     cpdef to_html(self):
         """

@@ -29,6 +29,7 @@ cimport numpy as np
 
 from rmgpy.quantity cimport ScalarQuantity, ArrayQuantity
 from rmgpy.kinetics.uncertainties cimport RateUncertainty
+from rmgpy.kinetics.arrhenius cimport Arrhenius
 
 ################################################################################
 
@@ -75,6 +76,8 @@ cdef class PDepKineticsModel(KineticsModel):
     cpdef np.ndarray get_effective_collider_efficiencies(self, list species)
 
     cpdef double get_rate_coefficient(self, double T, double P=?) except -1
+
+    cpdef Arrhenius to_arrhenius(self, double P=?)
 
     cpdef to_html(self)
 
