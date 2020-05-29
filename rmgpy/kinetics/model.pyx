@@ -38,7 +38,7 @@ from libc.math cimport log10
 
 import rmgpy.quantity as quantity
 from rmgpy.molecule import Molecule
-from rmgpy.kinetics.arrhenius import Arrhenius
+#from rmgpy.kinetics.arrhenius import Arrhenius
 
 ################################################################################
 
@@ -412,9 +412,9 @@ cdef class PDepKineticsModel(KineticsModel):
         """
         raise NotImplementedError('Unexpected call to PDepKineticsModel.get_rate_coefficient(); '
                                   'you should be using a class derived from PDepKineticsModel.')
-
+    """
     cpdef Arrhenius to_arrhenius(self, double P=1e5):
-        """
+        
         Create a pressure-independent version of this, i.e. an Arrhenius
         expression, fitted to a range of T, at the given effective pressure P.
         If you have collision efficiencies, use get_effective_pressure first.
@@ -428,7 +428,7 @@ cdef class PDepKineticsModel(KineticsModel):
         A linear least-squares fit is used, which guarantees that the
         resulting parameters provide the best possible approximation to the
         data.
-        """
+        
         cdef Arrhenius arrh
         cdef np.ndarray Tlist, klist
         cdef str kunits
@@ -445,7 +445,7 @@ cdef class PDepKineticsModel(KineticsModel):
         arrhenius = Arrhenius()
         arrhenius.fit_to_data(Tlist, klist, kunits)
         return arrhenius
-
+    """
 
     cpdef to_html(self):
         """

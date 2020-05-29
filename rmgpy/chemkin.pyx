@@ -1598,9 +1598,10 @@ def write_thermo_entry(species, element_counts=None, verbose=True):
 ################################################################################
 
 
-def write_reaction_string(reaction, java_library=False):
+def write_reaction_string(reaction, java_library=False, pressure_independent=False):
     """
-    Return a reaction string in chemkin format.
+    Return a reaction string in chemkin format
+    change pressure independent to true to output chemkin file with no M species.
     """
     kinetics = reaction.kinetics
 
@@ -1636,7 +1637,10 @@ def write_reaction_string(reaction, java_library=False):
         reaction_string += ' = ' if reaction.reversible else ' => '
         reaction_string += ' + '.join([get_species_identifier(product) for product in reaction.products])
         reaction_string += third_body
-
+    elif pressure_independent:
+        reaction_string = '+'.join([get_species_identifier(reactant) for reactant in reaction.reactants])
+        reaction_string += '=' if reaction.reversible else '=>'
+        reaction_string += '+'.join([get_species_identifier(product) for product in reaction.products])
     else:
         third_body = ''
         if kinetics.is_pressure_dependent():
@@ -1654,21 +1658,23 @@ def write_reaction_string(reaction, java_library=False):
         reaction_string += '=' if reaction.reversible else '=>'
         reaction_string += '+'.join([get_species_identifier(product) for product in reaction.products])
         reaction_string += third_body
-
     if len(reaction_string) > 52:
         logging.warning("Chemkin reaction string {0!r} is too long for Chemkin 2!".format(reaction_string))
+    if pressure_independent:
+        logging.warning("Chemkin reaction string {0!r} is a pressure dependent reaction and converting it to pressure independent!".format(reaction_string))
     return reaction_string
 
 ################################################################################
 
 
-def write_kinetics_entry(reaction, species_list, verbose=True, java_library=False, commented=False):
+def write_kinetics_entry(reaction, species_list, verbose=True, java_library=False, commented=False, pressure_independent=False):
     """
     Return a string representation of the reaction as used in a Chemkin
     file. Use `verbose = True` to turn on kinetics comments.
     Use `commented = True` to comment out the entire reaction.
     Use java_library = True in order to generate a kinetics entry suitable
     for an RMG-Java kinetics library.
+    Use pressure_independent=True to convert all types of reactions to Arrhenius
     """
     string = ""
 
@@ -1694,7 +1700,7 @@ def write_kinetics_entry(reaction, species_list, verbose=True, java_library=Fals
                                         specific_collider=reaction.specific_collider,
                                         reversible=reaction.reversible,
                                         kinetics=kinetics)
-            string += write_kinetics_entry(new_reaction, species_list, verbose, java_library, commented)
+            string += write_kinetics_entry(new_reaction, species_list, verbose, java_library, commented, pressure_independent)
             string += "DUPLICATE\n"
 
         if commented:
@@ -1752,7 +1758,7 @@ def write_kinetics_entry(reaction, species_list, verbose=True, java_library=Fals
 
     kinetics = reaction.kinetics
     num_reactants = len(reaction.reactants)
-    reaction_string = write_reaction_string(reaction, java_library)
+    reaction_string = write_reaction_string(reaction, java_library, pressure_independent)
 
     string += '{0!s:<51} '.format(reaction_string)
 
@@ -1818,7 +1824,7 @@ def write_kinetics_entry(reaction, species_list, verbose=True, java_library=Fals
 
     string += '\n'
 
-    if isinstance(kinetics, (_kinetics.ThirdBody, _kinetics.Lindemann, _kinetics.Troe)):
+    if isinstance(kinetics, (_kinetics.ThirdBody, _kinetics.Lindemann, _kinetics.Troe)) and not pressure_independent:
         # Write collider efficiencies
         for collider, efficiency in sorted(list(kinetics.efficiencies.items()), key=lambda item: id(item[0])):
             for species in species_list:
@@ -1827,7 +1833,7 @@ def write_kinetics_entry(reaction, species_list, verbose=True, java_library=Fals
                     break
         string += '\n'
 
-        if isinstance(kinetics, (_kinetics.Lindemann, _kinetics.Troe)):
+        if isinstance(kinetics, (_kinetics.Lindemann, _kinetics.Troe)) and not pressure_independent:
             # Write low-P kinetics
             arrhenius = kinetics.arrheniusLow
             conversion_factor = arrhenius.A.get_conversion_factor_from_si_to_cm_mol_s()
@@ -1847,7 +1853,7 @@ def write_kinetics_entry(reaction, species_list, verbose=True, java_library=Fals
                                                                                             kinetics.T3.value_si,
                                                                                             kinetics.T1.value_si,
                                                                                             kinetics.T2.value_si)
-    elif isinstance(kinetics, _kinetics.PDepArrhenius):
+    elif isinstance(kinetics, _kinetics.PDepArrhenius) and not pressure_independent:
         for P, arrhenius in zip(kinetics.pressures.value_si, kinetics.arrhenius):
             if isinstance(arrhenius, _kinetics.MultiArrhenius):
                 for arrh in arrhenius.arrhenius:
@@ -1868,7 +1874,7 @@ def write_kinetics_entry(reaction, species_list, verbose=True, java_library=Fals
                     arrhenius.n.value_si,
                     arrhenius.Ea.value_si / 4184.
                 )
-    elif isinstance(kinetics, _kinetics.Chebyshev):
+    elif isinstance(kinetics, _kinetics.Chebyshev) and not pressure_independent:
         string += '    TCHEB/ {0:<9.3f} {1:<9.3f}/\n'.format(kinetics.Tmin.value_si, kinetics.Tmax.value_si)
         string += '    PCHEB/ {0:<9.3f} {1:<9.3f}/\n'.format(kinetics.Pmin.value_si / 101325.,
                                                              kinetics.Pmax.value_si / 101325.)
@@ -2045,7 +2051,7 @@ def save_transport_file(path, species):
                 ))
 
 
-def save_chemkin_file(path, species, reactions, verbose=True, check_for_duplicates=True):
+def save_chemkin_file(path, species, reactions, verbose=True, check_for_duplicates=True, pressure_independent=False):
     """
     Save a Chemkin input file to `path` on disk containing the provided lists
     of `species` and `reactions`.
@@ -2093,7 +2099,7 @@ def save_chemkin_file(path, species, reactions, verbose=True, check_for_duplicat
     global _chemkin_reaction_count
     _chemkin_reaction_count = 0
     for rxn in reactions:
-        f.write(write_kinetics_entry(rxn, species_list=species, verbose=verbose))
+        f.write(write_kinetics_entry(rxn, species_list=species, verbose=verbose, pressure_independent=pressure_independent))
         # Don't forget to mark duplicates!
         f.write('\n')
     f.write('END\n\n')
@@ -2103,7 +2109,7 @@ def save_chemkin_file(path, species, reactions, verbose=True, check_for_duplicat
 
 
 def save_chemkin_surface_file(path, species, reactions, verbose=True, check_for_duplicates=True,
-                              surface_site_density=None):
+                              surface_site_density=None, pressure_independent=False):
     """
     Save a Chemkin *surface* input file to `path` on disk containing the provided lists
     of `species` and `reactions`.
@@ -2151,7 +2157,7 @@ def save_chemkin_surface_file(path, species, reactions, verbose=True, check_for_
     global _chemkin_reaction_count
     _chemkin_reaction_count = 0
     for rxn in reactions:
-        f.write(write_kinetics_entry(rxn, species_list=species, verbose=verbose))
+        f.write(write_kinetics_entry(rxn, species_list=species, verbose=verbose, pressure_independent=pressure_independent))
         f.write('\n')
     f.write('END\n\n')
     f.close()
@@ -2208,6 +2214,7 @@ def save_chemkin(reaction_model, path, verbose_path, dictionary_path=None, trans
     species and reactions to `path`. If `save_edge_species` is True, then 
     a chemkin file and dictionary file for the core AND edge species and reactions
     will be saved.  It also saves verbose versions of each file.
+    changed pressure independent to True
     """
     if save_edge_species:
         species_list = reaction_model.core.species + reaction_model.edge.species
@@ -2224,6 +2231,9 @@ def save_chemkin(reaction_model, path, verbose_path, dictionary_path=None, trans
         root, ext = os.path.splitext(verbose_path)
         gas_verbose_path = root + '-gas' + ext
         surface_verbose_path = root + '-surface' + ext
+        gas_pindep_path= root + '-gas-pindep' + ext
+        surface_pindep_path= root + '-surface-pindep' + ext
+
 
         surface_species_list = []
         gas_species_list = []
@@ -2249,12 +2259,19 @@ def save_chemkin(reaction_model, path, verbose_path, dictionary_path=None, trans
         save_chemkin_file(gas_verbose_path, gas_species_list, gas_rxn_list, verbose=True, check_for_duplicates=False)
         save_chemkin_surface_file(surface_verbose_path, surface_species_list, surface_rxn_list, verbose=True,
                                   check_for_duplicates=False, surface_site_density=reaction_model.surface_site_density)
+        logging.info('Saving pressure independent version of Chemkin files...')
+        save_chemkin_file(gas_pindep_path, gas_species_list, gas_rxn_list, verbose=False, check_for_duplicates=False,pressure_independent=True)
+        save_chemkin_surface_file(surface_pindep_path, surface_species_list, surface_rxn_list, verbose=False,
+                                  check_for_duplicates=False, surface_site_density=reaction_model.surface_site_density, pressure_independent=True)
 
     else:
         # Gas phase only
         save_chemkin_file(path, species_list, rxn_list, verbose=False, check_for_duplicates=False)
         logging.info('Saving annotated version of Chemkin file...')
         save_chemkin_file(verbose_path, species_list, rxn_list, verbose=True, check_for_duplicates=False)
+        logging.info('Saving pressure independent version of Chemkin file...')
+        pindep_path = path + '-pindep'
+        save_chemkin_file(pindep_path, species_list, rxn_list, verbose=True, check_for_duplicates=False, pressure_independent=True)
     if dictionary_path:
         save_species_dictionary(dictionary_path, species_list)
     if transport_path:
